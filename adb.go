@@ -138,14 +138,29 @@ func (c *Adb) ListDevices() ([]*DeviceInfo, error) {
 }
 
 /*
-Connect connect to a device via TCP/IP
+Connect to a device via TCP/IP
 
 Corresponds to the command:
 
-	adb connect
+	adb connect <host>[:<port>]
 */
 func (c *Adb) Connect(host string, port int) error {
 	_, err := roundTripSingleResponse(c.server, fmt.Sprintf("host:connect:%s:%d", host, port))
+	if err != nil {
+		return wrapClientError(err, c, "Connect")
+	}
+	return nil
+}
+
+/*
+Disconnect a connection to device via TCP/IP
+
+Corresponds to the command:
+
+	adb disconnect [<host>[:<port>]]
+*/
+func (c *Adb) Disconnect(address string) error {
+	_, err := roundTripSingleResponse(c.server, fmt.Sprintf("host:disconnect:%s", address))
 	if err != nil {
 		return wrapClientError(err, c, "Connect")
 	}
