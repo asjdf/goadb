@@ -38,7 +38,7 @@ func TestParseDeviceLongUnauthorized(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, &DeviceInfo{
 		Serial: "SERIAL",
-		Usb: "1234"}, dev)
+		Usb:    "1234"}, dev)
 }
 
 func TestParseDeviceLongUsb(t *testing.T) {
@@ -50,4 +50,15 @@ func TestParseDeviceLongUsb(t *testing.T) {
 		Model:      "MODEL",
 		DeviceInfo: "DEVICE",
 		Usb:        "1234"}, dev)
+}
+
+func TestParseDeviceLongUsbMacOS(t *testing.T) {
+	dev, err := parseDeviceLong("005561020804           device 1-1 product:lineage_tiffany model:Mi_5X device:tiffany transport_id:2 \n")
+	assert.NoError(t, err)
+	assert.Equal(t, &DeviceInfo{
+		Serial:     "005561020804",
+		Product:    "lineage_tiffany",
+		Model:      "Mi_5X",
+		DeviceInfo: "tiffany",
+		Usb:        "1-1"}, dev)
 }

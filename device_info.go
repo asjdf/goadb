@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"strings"
 
-	"github.com/zach-klippenstein/goadb/internal/errors"
+	"github.com/asjdf/goadb/internal/errors"
 )
 
 type DeviceInfo struct {
@@ -74,6 +74,9 @@ func parseDeviceLong(line string) (*DeviceInfo, error) {
 func parseDeviceAttributes(fields []string) map[string]string {
 	attrs := map[string]string{}
 	for _, field := range fields {
+		if !strings.Contains(field, ":") {
+			field = "usb:" + field
+		}
 		key, val := parseKeyVal(field)
 		attrs[key] = val
 	}
