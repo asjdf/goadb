@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -193,6 +194,46 @@ func (c *Device) OpenWrite(path string, perms os.FileMode, mtime time.Time) (io.
 
 	writer, err := sendFile(conn, path, perms, mtime)
 	return writer, wrapClientError(err, c, "OpenWrite(%s)", path)
+}
+
+type LenReader interface {
+	Len() int
+	io.Reader
+}
+
+func (c *Device) Install(apk LenReader, args ...string) error {
+	conn, err := c.dialDevice()
+	if err != nil {
+		return wrapClientError(err, c, "InstallApk")
+	}
+	defer conn.Close()
+
+	cmd := "exec:cmd package install"
+	if len(args) > 0 {
+		cmd += " " + strings.Join(args, " ")
+	}
+	// 添加size参数 [流式安装所需]
+	cmd += " -S " + strconv.Itoa(apk.Len())
+
+	err = conn.SendMessage([]byte(cmd))
+	if err != nil {
+		return wrapClientError(err, c, "InstallApk")
+	}
+
+	w := conn.Writer()
+	_, err = io.Copy(w, apk)
+	if err != nil {
+		return wrapClientError(err, c, "InstallApk")
+	}
+
+	resp, err := conn.ReadUntilEof()
+	if err != nil {
+		return wrapClientError(err, c, "InstallApk")
+	}
+	if !strings.Contains(string(resp), "Success") {
+		return fmt.Errorf("install apk failed: %s", resp)
+	}
+	return nil
 }
 
 // getAttribute returns the first message returned by the server by running

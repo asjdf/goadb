@@ -162,7 +162,7 @@ Corresponds to the command:
 func (c *Adb) Disconnect(address string) error {
 	_, err := roundTripSingleResponse(c.server, fmt.Sprintf("host:disconnect:%s", address))
 	if err != nil {
-		return wrapClientError(err, c, "Connect")
+		return wrapClientError(err, c, "Disonnect")
 	}
 	return nil
 }

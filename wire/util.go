@@ -68,7 +68,7 @@ func errIncompleteMessage(description string, actual int, expected int) error {
 	}
 }
 
-// writeFully writes all of data to w.
+// writeFully writes all the data to w.
 // Inverse of io.ReadFully().
 func writeFully(w io.Writer, data []byte) error {
 	offset := 0
