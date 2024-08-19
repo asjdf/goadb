@@ -220,8 +220,7 @@ func (c *Device) Install(apk LenReader, args ...string) error {
 		return wrapClientError(err, c, "InstallApk")
 	}
 
-	w := conn.Writer()
-	_, err = io.Copy(w, apk)
+	_, err = io.Copy(conn, apk)
 	if err != nil {
 		return wrapClientError(err, c, "InstallApk")
 	}
