@@ -28,8 +28,9 @@ type MockServer struct {
 	Trace []string
 }
 
-func (s *MockServer) Writer() io.Writer {
-	panic("not implemented")
+func (s *MockServer) Write(p []byte) (n int, err error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 var _ server = &MockServer{}
