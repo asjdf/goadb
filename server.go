@@ -2,9 +2,13 @@ package adb
 
 import (
 	"fmt"
-	"github.com/asjdf/goadb/internal/errors"
-	"github.com/asjdf/goadb/wire"
+	"os"
+	"path"
 	"strings"
+
+	"github.com/asjdf/goadb/internal/errors"
+	"github.com/asjdf/goadb/pkg"
+	"github.com/asjdf/goadb/wire"
 )
 
 const (
@@ -12,6 +16,8 @@ const (
 
 	// Default port the adb server listens on.
 	AdbPort = 5037
+
+	AdbVendorKeyExt = ".adb_key"
 )
 
 type ServerConfig struct {
@@ -22,6 +28,8 @@ type ServerConfig struct {
 	// If not specified, will use the default port on localhost.
 	Host string
 	Port int
+	// KeyPath  must be a dir and file name of the private key must have ext .adb_key
+	KeyPath string
 
 	// Dialer used to connect to the adb server.
 	Dialer
@@ -32,6 +40,7 @@ type ServerConfig struct {
 // Server knows how to start the adb server and connect to it.
 type server interface {
 	Start() error
+	StartDebug() error
 	Dial() (*wire.Conn, error)
 }
 
@@ -64,24 +73,44 @@ func newServer(config ServerConfig) (server, error) {
 		config.Port = AdbPort
 	}
 
+	var serverListenAddress = fmt.Sprintf("%s:%d", config.Host, config.Port)
+
 	if config.fs == nil {
 		config.fs = localFilesystem
 	}
 
 	if config.PathToAdb == "" {
-		path, err := config.fs.LookPath(AdbExecutableName)
+		adbPath, err := config.fs.LookPath(AdbExecutableName)
 		if err != nil {
 			return nil, errors.WrapErrorf(err, errors.ServerNotAvailable, "could not find %s in PATH", AdbExecutableName)
 		}
-		config.PathToAdb = path
+		config.PathToAdb = adbPath
 	}
 	if err := config.fs.IsExecutableFile(config.PathToAdb); err != nil {
 		return nil, errors.WrapErrorf(err, errors.ServerNotAvailable, "invalid adb executable: %s", config.PathToAdb)
 	}
 
+	if config.KeyPath != "" {
+		fileInfoList, err := config.fs.ListFileNonRecursive(config.KeyPath)
+		if err != nil {
+			return nil, errors.WrapErrorf(err, errors.ParseError, "failed to list file on key path: %s", config.KeyPath)
+		}
+		var hasMatchedKeyFile = false
+		for _, fileInfo := range fileInfoList {
+			var fileName = fileInfo.Name()
+			if path.Ext(fileName) == AdbVendorKeyExt {
+				hasMatchedKeyFile = true
+				break
+			}
+		}
+		if !hasMatchedKeyFile {
+			return nil, errors.WrapErrorf(err, errors.ParseError, "key file on key path must have ext %s: %s", AdbVendorKeyExt, config.KeyPath)
+		}
+	}
+
 	return &realServer{
 		config:  config,
-		address: fmt.Sprintf("%s:%d", config.Host, config.Port),
+		address: serverListenAddress,
 	}, nil
 }
 
@@ -105,9 +134,39 @@ func (s *realServer) Dial() (*wire.Conn, error) {
 
 // StartServer ensures there is a server running.
 func (s *realServer) Start() error {
-	output, err := s.config.fs.CmdCombinedOutput(s.config.PathToAdb, "-L", fmt.Sprintf("tcp:%s", s.address), "start-server")
+	var envMap = make(map[string]string)
+	if s.config.KeyPath != "" {
+		envMap["ADB_VENDOR_KEYS"] = s.config.KeyPath
+	}
+	var cmdArgs = pkg.CommandExecuteArgs{
+		Name:    s.config.PathToAdb,
+		ArgList: []string{"-L", fmt.Sprintf("tcp:%s", s.address), "start-server"},
+		EnvMap:  envMap,
+	}
+	output, err := s.config.fs.CmdCombinedOutput(cmdArgs)
 	outputStr := strings.TrimSpace(string(output))
 	return errors.WrapErrorf(err, errors.ServerNotAvailable, "error starting server: %s\noutput:\n%s", err, outputStr)
+}
+
+func (s *realServer) StartDebug() error {
+	var envMap = make(map[string]string)
+	envMap["ADB_TRACE"] = "all"
+	if s.config.KeyPath != "" {
+		envMap["ADB_VENDOR_KEYS"] = s.config.KeyPath
+	}
+	var cmdArgs = pkg.CommandExecuteArgs{
+		Name:    s.config.PathToAdb,
+		ArgList: []string{"-L", fmt.Sprintf("tcp:%s", s.address), "server", "nodaemon"},
+		EnvMap:  envMap,
+	}
+	processHolder, err := s.config.fs.CmdWithStream(cmdArgs)
+	if err != nil {
+		return errors.WrapErrorf(err, errors.ServerNotAvailable, "failed to start server")
+	}
+	if err := processHolder.RedirectOutputAsync("[AdbServer]"); err != nil {
+		return errors.WrapErrorf(err, errors.ServerNotAvailable, "failed to redirect output stream for server")
+	}
+	return nil
 }
 
 // filesystem abstracts interactions with the local filesystem for testability.
@@ -115,9 +174,13 @@ type filesystem struct {
 	// Wraps exec.LookPath.
 	LookPath func(string) (string, error)
 
+	ListFileNonRecursive func(dir string) ([]os.FileInfo, error)
+
 	// Returns nil if path is a regular file and executable by the current user.
 	IsExecutableFile func(path string) error
 
+	CmdWithStream func(args pkg.CommandExecuteArgs) (processHolder *pkg.ProcessHolder, err error)
+
 	// Wraps exec.Command().CombinedOutput()
-	CmdCombinedOutput func(name string, arg ...string) ([]byte, error)
+	CmdCombinedOutput func(args pkg.CommandExecuteArgs) ([]byte, error)
 }

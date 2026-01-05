@@ -4,6 +4,7 @@ go 1.22.5
 
 require (
 	github.com/cheggaaa/pb v1.0.29
+	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/sys v0.24.0
 )

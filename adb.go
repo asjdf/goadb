@@ -41,8 +41,12 @@ func (c *Adb) Dial() (*wire.Conn, error) {
 }
 
 // Starts the adb server if it’s not running.
-func (c *Adb) StartServer() error {
-	return c.server.Start()
+func (c *Adb) StartServer(debug bool) error {
+	if debug {
+		return c.server.StartDebug()
+	} else {
+		return c.server.Start()
+	}
 }
 
 func (c *Adb) Device(descriptor DeviceDescriptor) *Device {
