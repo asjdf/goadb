@@ -235,6 +235,32 @@ func (c *Device) Install(apk LenReader, args ...string) error {
 	return nil
 }
 
+// InteractiveShell 开启交互终端，需要手动关闭连接
+// cmdName通常传sh，或其他持续输出的命令
+func (c *Device) InteractiveShell(cmdName string, args ...string) (*wire.ShellConn, error) {
+	const topic = "InteractiveShell"
+	conn, err := c.dialDevice()
+	if err != nil {
+		return nil, wrapClientError(err, c, topic+"_DialDevice")
+	}
+	cmd := fmt.Sprintf("exec:%s", cmdName)
+	if len(args) > 0 {
+		cmd += " " + strings.Join(args, " ")
+	}
+	err = conn.SendMessage([]byte(cmd))
+	if err != nil {
+		return nil, wrapClientError(err, c, topic+"_SendCmdMessage")
+	}
+	statusStr, err := conn.ReadStatus(topic)
+	if err != nil {
+		return nil, wrapClientError(err, c, topic+"_ReadStatus")
+	}
+	if !wire.IsOkayStatus(statusStr) {
+		return nil, fmt.Errorf("unexpected status: %s", statusStr)
+	}
+	return wire.NewShellConn(conn), nil
+}
+
 // getAttribute returns the first message returned by the server by running
 // <host-prefix>:<attr>, where host-prefix is determined from the DeviceDescriptor.
 func (c *Device) getAttribute(attr string) (string, error) {

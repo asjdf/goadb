@@ -21,11 +21,67 @@ type MockServer struct {
 	Messages     []string
 	nextMsgIndex int
 
+	// readPos tracks the current read position within the current message for Read() calls.
+	// This is separate from nextMsgIndex because Read() supports partial reads.
+	readPos      int
+	readMsgIndex int
+
 	// Each message passed to a send call is appended to this slice.
 	Requests []string
 
 	// Each time an operation is performed, its name is appended to this slice.
 	Trace []string
+}
+
+func (s *MockServer) Read(p []byte) (n int, err error) {
+	s.logMethod("Read")
+	if err := s.getNextErrToReturn(); err != nil {
+		return 0, err
+	}
+
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	// 如果没有更多消息可读，返回 EOF
+	if s.readMsgIndex >= len(s.Messages) {
+		return 0, errors.WrapErrorf(io.EOF, errors.NetworkError, "")
+	}
+
+	// 获取当前消息
+	msg := []byte(s.Messages[s.readMsgIndex])
+	msgLen := len(msg)
+
+	// 如果当前消息已经读取完毕，移动到下一个消息
+	if s.readPos >= msgLen {
+		s.readMsgIndex++
+		s.readPos = 0
+		// 检查是否还有更多消息
+		if s.readMsgIndex >= len(s.Messages) {
+			return 0, errors.WrapErrorf(io.EOF, errors.NetworkError, "")
+		}
+		msg = []byte(s.Messages[s.readMsgIndex])
+		msgLen = len(msg)
+	}
+
+	// 计算可以读取的字节数
+	available := msgLen - s.readPos
+	toRead := len(p)
+	if toRead > available {
+		toRead = available
+	}
+
+	// 复制数据到缓冲区
+	copy(p, msg[s.readPos:s.readPos+toRead])
+	s.readPos += toRead
+
+	// 如果当前消息读取完毕，移动到下一个消息
+	if s.readPos >= msgLen {
+		s.readMsgIndex++
+		s.readPos = 0
+	}
+
+	return toRead, nil
 }
 
 func (s *MockServer) Write(p []byte) (n int, err error) {
@@ -45,6 +101,11 @@ func (s *MockServer) Dial() (*wire.Conn, error) {
 
 func (s *MockServer) Start() error {
 	s.logMethod("Start")
+	return nil
+}
+
+func (s *MockServer) StartDebug() error {
+	s.logMethod("StartDebug")
 	return nil
 }
 

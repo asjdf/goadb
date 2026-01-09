@@ -21,6 +21,10 @@ const (
 	StatusNone            = ""
 )
 
+func IsOkayStatus(status string) bool {
+	return status == StatusSuccess
+}
+
 func isFailureStatus(status string) bool {
 	return status == StatusFailure
 }
@@ -37,7 +41,7 @@ Scanner reads tokens from a server.
 See Conn for more details.
 */
 type Scanner interface {
-	io.Closer
+	io.ReadCloser
 	StatusReader
 	ReadMessage() ([]byte, error)
 	ReadUntilEof() ([]byte, error)
@@ -75,6 +79,10 @@ func (s *realScanner) ReadUntilEof() ([]byte, error) {
 		return nil, errors.WrapErrorf(err, errors.NetworkError, "error reading until EOF")
 	}
 	return data, nil
+}
+
+func (s *realScanner) Read(p []byte) (int, error) {
+	return s.reader.Read(p)
 }
 
 func (s *realScanner) NewSyncScanner() SyncScanner {
