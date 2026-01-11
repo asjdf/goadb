@@ -3,17 +3,20 @@ package wire
 import (
 	"bytes"
 	"fmt"
+	"github.com/asjdf/goadb/wire/os_specific"
 	"io"
+	"time"
 )
 
 type ShellConn struct {
 	rawConn *Conn
 }
 
-func NewShellConn(rawConn *Conn) *ShellConn {
-	return &ShellConn{
+func NewShellConn(rawConn *Conn) (*ShellConn, error) {
+	var shellConn = ShellConn{
 		rawConn: rawConn,
 	}
+	return &shellConn, nil
 }
 
 func (s *ShellConn) Read(p []byte) (n int, err error) {
@@ -75,4 +78,13 @@ func (s *ShellConn) WriteLine(line string) (int, error) {
 	var lineWithEOL = fmt.Sprintf("%s\n", line)
 	var lineData = []byte(lineWithEOL)
 	return s.Write(lineData)
+}
+
+type ShellConnRunCommandArgs struct {
+	CommandStr string
+	Timeout    time.Duration
+}
+
+func (s *ShellConn) RunCommand(args ShellConnRunCommandArgs) (exitCode int, outputData []byte, err error) {
+	return os_specific.RunCommandInShell(s.rawConn, args.CommandStr, args.Timeout)
 }

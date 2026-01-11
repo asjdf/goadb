@@ -258,7 +258,7 @@ func (c *Device) InteractiveShell(cmdName string, args ...string) (*wire.ShellCo
 	if !wire.IsOkayStatus(statusStr) {
 		return nil, fmt.Errorf("unexpected status: %s", statusStr)
 	}
-	return wire.NewShellConn(conn), nil
+	return wire.NewShellConn(conn)
 }
 
 // getAttribute returns the first message returned by the server by running
