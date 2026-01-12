@@ -2,10 +2,11 @@ package wire
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-	"github.com/asjdf/goadb/wire/os_specific"
 	"io"
-	"time"
+
+	"github.com/asjdf/goadb/wire/os_specific"
 )
 
 type ShellConn struct {
@@ -82,9 +83,8 @@ func (s *ShellConn) WriteLine(line string) (int, error) {
 
 type ShellConnRunCommandArgs struct {
 	CommandStr string
-	Timeout    time.Duration
 }
 
-func (s *ShellConn) RunCommand(args ShellConnRunCommandArgs) (exitCode int, outputData []byte, err error) {
-	return os_specific.RunCommandInShell(s.rawConn, args.CommandStr, args.Timeout)
+func (s *ShellConn) RunCommand(ctx context.Context, args ShellConnRunCommandArgs) (exitCode int, outputData []byte, err error) {
+	return os_specific.RunCommandInShell(ctx, s.rawConn, args.CommandStr)
 }

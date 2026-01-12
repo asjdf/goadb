@@ -1,20 +1,20 @@
 package os_specific
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/pkg/errors"
 )
 
 // RunCommandInShell 在 Windows 上执行命令，不使用 expect.Console
 // 它通过拼接 echo 命令来捕获退出码，并自动剥离回显。
-func RunCommandInShell(conn io.ReadWriter, cmdStr string, timeout time.Duration) (int, []byte, error) {
+func RunCommandInShell(ctx context.Context, conn io.ReadWriter, cmdStr string) (int, []byte, error) {
 	// 1. 生成一个随机的唯一标记 (Sentinel)
 	// 格式例如: __CMD_END_a1b2c3d4__
 	randBytes := make([]byte, 8)
@@ -76,22 +76,23 @@ func RunCommandInShell(conn io.ReadWriter, cmdStr string, timeout time.Duration)
 	}()
 
 	// 等待完成或超时
-	// 如果 timeout == 0，无限等待，不设置超时
-	if timeout == 0 {
-		// 无限等待
+	// 从 ctx 中读取超时设置
+	_, hasDeadline := ctx.Deadline()
+	if !hasDeadline {
+		// 没有设置超时，无限等待
 		<-done
 		if readErr != nil {
 			return -1, nil, fmt.Errorf("command execution error: %w", readErr)
 		}
 	} else {
-		// 带超时等待
+		// 带超时等待，使用 ctx.Done() 来检测超时
 		select {
 		case <-done:
 			if readErr != nil {
 				return -1, nil, fmt.Errorf("command execution error: %w", readErr)
 			}
-		case <-time.After(timeout):
-			return -1, nil, fmt.Errorf("command execution timeout after %v", timeout)
+		case <-ctx.Done():
+			return -1, nil, fmt.Errorf("command execution timeout: %w", ctx.Err())
 		}
 	}
 
