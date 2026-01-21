@@ -83,6 +83,31 @@ func (c *Device) DeviceInfo() (*DeviceInfo, error) {
 	return nil, wrapClientError(err, c, "DeviceInfo")
 }
 
+func (c *Device) FeatureList() (string, error) {
+	conn, err := c.dialDevice()
+	if err != nil {
+		return "", wrapClientError(err, c, "GetFeatureList-DialDevice")
+	}
+	defer conn.Close()
+	cmd := "host:features"
+	err = conn.SendMessage([]byte(cmd))
+	if err != nil {
+		return "", wrapClientError(err, c, "GetFeatureList-SendCommandMsg")
+	}
+	status, err := conn.ReadStatus(cmd)
+	if err != nil {
+		return "", wrapClientError(err, c, "GetFeatureList-ReadStatus")
+	}
+	if !wire.IsOkayStatus(status) {
+		return "", fmt.Errorf("unexpected status %s", status)
+	}
+	retData, err := conn.ReadMessage()
+	if err != nil {
+		return "", wrapClientError(err, c, "GetFeatureList-ReadResp")
+	}
+	return string(retData), nil
+}
+
 /*
 RunCommand runs the specified commands on a shell on the device.
 
@@ -259,6 +284,59 @@ func (c *Device) InteractiveShell(cmdName string, args ...string) (*wire.ShellCo
 		return nil, fmt.Errorf("unexpected status: %s", statusStr)
 	}
 	return wire.NewShellConn(conn)
+}
+
+func (c *Device) StartPortForwarding(localProtocolKind ForwardProtocolKind, localPort int, remoteProtocolKind ForwardProtocolKind, remotePort int) error {
+	conn, err := c.dialDevice()
+	if err != nil {
+		return wrapClientError(err, c, "StartPortForwarding")
+	}
+	defer conn.Close()
+
+	var localPortStr = localProtocolKind.PortStrOf(localPort)
+	var remotePortStr = remoteProtocolKind.PortStrOf(remotePort)
+	cmd := fmt.Sprintf("host:forward:%s;%s", localPortStr, remotePortStr)
+	err = conn.SendMessage([]byte(cmd))
+	if err != nil {
+		return wrapClientError(err, c, "StartPortForwarding")
+	}
+	_, err = conn.ReadStatus(cmd)
+	return wrapClientError(err, c, "StartPortForwarding")
+}
+
+// RemoveForward 删除指定的端口转发规则
+func (c *Device) RemoveForward(localProtocolKind ForwardProtocolKind, localPort int) error {
+	conn, err := c.dialDevice()
+	if err != nil {
+		return wrapClientError(err, c, "RemoveForward")
+	}
+	defer conn.Close()
+
+	var localPortStr = localProtocolKind.PortStrOf(localPort)
+	cmd := fmt.Sprintf("host:killforward:%s", localPortStr)
+	err = conn.SendMessage([]byte(cmd))
+	if err != nil {
+		return wrapClientError(err, c, "RemoveForward")
+	}
+	_, err = conn.ReadStatus(cmd)
+	return wrapClientError(err, c, "RemoveForward")
+}
+
+// RemoveAllForwards 删除设备上的所有端口转发规则
+func (c *Device) RemoveAllForwards() error {
+	conn, err := c.dialDevice()
+	if err != nil {
+		return wrapClientError(err, c, "RemoveAllForwards")
+	}
+	defer conn.Close()
+
+	cmd := "host:killforward-all"
+	err = conn.SendMessage([]byte(cmd))
+	if err != nil {
+		return wrapClientError(err, c, "RemoveAllForwards")
+	}
+	_, err = conn.ReadStatus(cmd)
+	return wrapClientError(err, c, "RemoveAllForwards")
 }
 
 // getAttribute returns the first message returned by the server by running

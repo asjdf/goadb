@@ -171,6 +171,16 @@ func (c *Adb) Disconnect(address string) error {
 	return nil
 }
 
+func (c *Adb) ForwardList() ([]Forward, error) {
+	resp, err := roundTripSingleResponse(c.server, "host:list-forward")
+	if err != nil {
+		return nil, wrapClientError(err, c, "ForwardList")
+	}
+	var respStr = string(resp)
+	var forwardList = parseForwardList(respStr)
+	return forwardList, nil
+}
+
 func (c *Adb) parseServerVersion(versionRaw []byte) (int, error) {
 	versionStr := string(versionRaw)
 	version, err := strconv.ParseInt(versionStr, 16, 32)
