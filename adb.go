@@ -57,6 +57,22 @@ func (c *Adb) Device(descriptor DeviceDescriptor) *Device {
 	}
 }
 
+func (c *Adb) DeviceBySerial(serial string, mustOnline bool) (*Device, error) {
+	var serialDeviceDesc = DeviceWithSerial(serial)
+	var deviceHandle = c.Device(serialDeviceDesc)
+	if !mustOnline {
+		return deviceHandle, nil
+	}
+	deviceState, err := deviceHandle.State()
+	if err != nil {
+		return nil, wrapClientError(err, c, "GetDeviceState")
+	}
+	if deviceState != StateOnline {
+		return nil, fmt.Errorf("unexpected device state: %s", deviceState)
+	}
+	return deviceHandle, nil
+}
+
 func (c *Adb) NewDeviceWatcher() *DeviceWatcher {
 	return newDeviceWatcher(c.server)
 }

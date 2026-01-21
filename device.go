@@ -304,11 +304,11 @@ func (c *Device) StartPortForwarding(localProtocolKind ForwardProtocolKind, loca
 	return wrapClientError(err, c, "StartPortForwarding")
 }
 
-// RemoveForward 删除指定的端口转发规则
-func (c *Device) RemoveForward(localProtocolKind ForwardProtocolKind, localPort int) error {
+// RemovePortForwarding 删除指定的端口转发规则
+func (c *Device) RemovePortForwarding(localProtocolKind ForwardProtocolKind, localPort int) error {
 	conn, err := c.dialDevice()
 	if err != nil {
-		return wrapClientError(err, c, "RemoveForward")
+		return wrapClientError(err, c, "RemovePortForwarding")
 	}
 	defer conn.Close()
 
@@ -316,27 +316,27 @@ func (c *Device) RemoveForward(localProtocolKind ForwardProtocolKind, localPort 
 	cmd := fmt.Sprintf("host:killforward:%s", localPortStr)
 	err = conn.SendMessage([]byte(cmd))
 	if err != nil {
-		return wrapClientError(err, c, "RemoveForward")
+		return wrapClientError(err, c, "RemovePortForwarding")
 	}
 	_, err = conn.ReadStatus(cmd)
-	return wrapClientError(err, c, "RemoveForward")
+	return wrapClientError(err, c, "RemovePortForwarding")
 }
 
-// RemoveAllForwards 删除设备上的所有端口转发规则
-func (c *Device) RemoveAllForwards() error {
+// RemoveAllPortForwards 删除设备上的所有端口转发规则
+func (c *Device) RemoveAllPortForwards() error {
 	conn, err := c.dialDevice()
 	if err != nil {
-		return wrapClientError(err, c, "RemoveAllForwards")
+		return wrapClientError(err, c, "RemoveAllPortForwards")
 	}
 	defer conn.Close()
 
 	cmd := "host:killforward-all"
 	err = conn.SendMessage([]byte(cmd))
 	if err != nil {
-		return wrapClientError(err, c, "RemoveAllForwards")
+		return wrapClientError(err, c, "RemoveAllPortForwards")
 	}
 	_, err = conn.ReadStatus(cmd)
-	return wrapClientError(err, c, "RemoveAllForwards")
+	return wrapClientError(err, c, "RemoveAllPortForwards")
 }
 
 // getAttribute returns the first message returned by the server by running
