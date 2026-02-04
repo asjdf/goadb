@@ -4,11 +4,13 @@
 package adb
 
 import (
-	stderrors "errors"
-	"github.com/asjdf/goadb/pkg"
 	"io/fs"
 	"os"
 	"os/exec"
+
+	"github.com/pkg/errors"
+
+	"github.com/asjdf/goadb/pkg"
 )
 
 var localFilesystem = &filesystem{
@@ -31,7 +33,7 @@ var localFilesystem = &filesystem{
 			return err
 		}
 		if !info.Mode().IsRegular() {
-			return stderrors.New("not a regular file")
+			return errors.New("not a regular file")
 		}
 		return isExecutable(path)
 	},
