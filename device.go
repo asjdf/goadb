@@ -1,6 +1,7 @@
 package adb
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -227,11 +228,32 @@ type LenReader interface {
 }
 
 func (c *Device) Install(apk LenReader, args ...string) error {
+	return c.install(context.Background(), apk, args...)
+}
+
+func (c *Device) InstallWithContext(ctx context.Context, apk LenReader, args ...string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return c.install(ctx, apk, args...)
+}
+
+func (c *Device) install(ctx context.Context, apk LenReader, args ...string) error {
+	if err := installContextErr(ctx); err != nil {
+		return wrapClientError(err, c, "InstallApk")
+	}
+
 	conn, err := c.dialDevice()
 	if err != nil {
 		return wrapClientError(err, c, "InstallApk")
 	}
 	defer conn.Close()
+
+	stopWatchingContext := closeOnContextDone(ctx, conn)
+	if stopWatchingContext != nil {
+		defer stopWatchingContext()
+	}
 
 	cmd := "exec:cmd package install"
 	if len(args) > 0 {
@@ -242,21 +264,94 @@ func (c *Device) Install(apk LenReader, args ...string) error {
 
 	err = conn.SendMessage([]byte(cmd))
 	if err != nil {
+		return c.wrapInstallError(ctx, err)
+	}
+
+	status, err := conn.ReadStatus(cmd)
+	if err != nil {
+		return c.wrapInstallError(ctx, err)
+	}
+	if !wire.IsOkayStatus(status) {
+		return fmt.Errorf("unexpected status %s", status)
+	}
+
+	if err := installContextErr(ctx); err != nil {
 		return wrapClientError(err, c, "InstallApk")
 	}
 
 	_, err = io.Copy(conn, apk)
 	if err != nil {
+		return c.wrapInstallError(ctx, err)
+	}
+
+	if err := installContextErr(ctx); err != nil {
 		return wrapClientError(err, c, "InstallApk")
+	}
+
+	if err := closeInstallWrite(conn); err != nil {
+		return c.wrapInstallError(ctx, errors.WrapErrorf(err, errors.NetworkError, "error closing install input"))
 	}
 
 	resp, err := conn.ReadUntilEof()
 	if err != nil {
-		return wrapClientError(err, c, "InstallApk")
+		return c.wrapInstallError(ctx, err)
 	}
-	if !strings.Contains(string(resp), "Success") {
+	respStr := strings.TrimSpace(string(resp))
+	if respStr != "" && !strings.Contains(respStr, "Success") {
 		return fmt.Errorf("install apk failed: %s", resp)
 	}
+	return nil
+}
+
+func (c *Device) wrapInstallError(ctx context.Context, err error) error {
+	if ctxErr := installContextErr(ctx); ctxErr != nil {
+		return wrapClientError(ctxErr, c, "InstallApk")
+	}
+
+	return wrapClientError(err, c, "InstallApk")
+}
+
+func installContextErr(ctx context.Context) error {
+	if ctx == nil || ctx.Err() == nil {
+		return nil
+	}
+
+	return errors.WrapErrorf(ctx.Err(), errors.NetworkError, "install canceled")
+}
+
+func closeOnContextDone(ctx context.Context, closer io.Closer) func() {
+	if ctx == nil {
+		return nil
+	}
+
+	done := ctx.Done()
+	if done == nil {
+		return nil
+	}
+
+	stop := make(chan struct{})
+	go func() {
+		select {
+		case <-done:
+			_ = closer.Close()
+		case <-stop:
+		}
+	}()
+
+	return func() {
+		close(stop)
+	}
+}
+
+func closeInstallWrite(conn *wire.Conn) error {
+	type closeWriter interface {
+		CloseWrite() error
+	}
+
+	if sender, ok := conn.Sender.(closeWriter); ok {
+		return sender.CloseWrite()
+	}
+
 	return nil
 }
 

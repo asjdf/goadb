@@ -38,6 +38,18 @@ func (tcpDialer) Dial(address string) (*wire.Conn, error) {
 
 	return &wire.Conn{
 		Scanner: wire.NewScanner(safeConn),
-		Sender:  wire.NewSender(safeConn),
+		Sender:  &closeWriteSender{Sender: wire.NewSender(safeConn), conn: netConn},
 	}, nil
+}
+
+type closeWriteSender struct {
+	wire.Sender
+	conn net.Conn
+}
+
+func (s *closeWriteSender) CloseWrite() error {
+	if conn, ok := s.conn.(interface{ CloseWrite() error }); ok {
+		return conn.CloseWrite()
+	}
+	return s.Sender.Close()
 }
