@@ -288,10 +288,6 @@ func (c *Device) install(ctx context.Context, apk LenReader, args ...string) err
 		return wrapClientError(err, c, "InstallApk")
 	}
 
-	if err := closeInstallWrite(conn); err != nil {
-		return c.wrapInstallError(ctx, errors.WrapErrorf(err, errors.NetworkError, "error closing install input"))
-	}
-
 	resp, err := conn.ReadUntilEof()
 	if err != nil {
 		return c.wrapInstallError(ctx, err)
@@ -341,18 +337,6 @@ func closeOnContextDone(ctx context.Context, closer io.Closer) func() {
 	return func() {
 		close(stop)
 	}
-}
-
-func closeInstallWrite(conn *wire.Conn) error {
-	type closeWriter interface {
-		CloseWrite() error
-	}
-
-	if sender, ok := conn.Sender.(closeWriter); ok {
-		return sender.CloseWrite()
-	}
-
-	return nil
 }
 
 // InteractiveShell 开启交互终端，需要手动关闭连接

@@ -1,8 +1,10 @@
 package adb
 
 import (
+	"errors"
 	"testing"
 
+	internalErrors "github.com/asjdf/goadb/internal/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -24,4 +26,15 @@ func TestIsBlankWhenJustWhitespace(t *testing.T) {
 
 func TestIsBlankNo(t *testing.T) {
 	assert.False(t, isBlank("     h   "))
+}
+
+func TestWrapClientErrorWrapsGenericErrorsAsNetworkError(t *testing.T) {
+	client := &Device{}
+	cause := errors.New("boom")
+
+	err := wrapClientError(cause, client, "RunCommand")
+
+	assert.Error(t, err)
+	assert.True(t, HasErrCode(err, NetworkError))
+	assert.Equal(t, cause, err.(*internalErrors.Err).Cause)
 }

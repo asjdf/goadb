@@ -166,7 +166,7 @@ func waitForPackageInstalledState(t *testing.T, device *Device, wantInstalled bo
 }
 
 func isPackageInstalled(device *Device) (bool, error) {
-	output, err := device.RunCommand("pm", "list", "packages", deviceInstallTestPackageName)
+	output, err := device.RunCommand("pm", "list", "packages", "-u", deviceInstallTestPackageName)
 	if err != nil {
 		return false, err
 	}
