@@ -3,6 +3,7 @@ package wire
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 
@@ -11,6 +12,8 @@ import (
 
 type ShellConn struct {
 	rawConn *Conn
+	framed  bool
+	readBuf bytes.Buffer
 }
 
 func NewShellConn(rawConn *Conn) (*ShellConn, error) {
@@ -20,11 +23,28 @@ func NewShellConn(rawConn *Conn) (*ShellConn, error) {
 	return &shellConn, nil
 }
 
+func NewShellV2Conn(rawConn *Conn) (*ShellConn, error) {
+	var shellConn = ShellConn{
+		rawConn: rawConn,
+		framed:  true,
+	}
+	return &shellConn, nil
+}
+
 func (s *ShellConn) Read(p []byte) (n int, err error) {
+	if s.framed {
+		return s.readShellV2(p)
+	}
 	return s.rawConn.Read(p)
 }
 
 func (s *ShellConn) Write(p []byte) (n int, err error) {
+	if s.framed {
+		if err := s.writeShellV2(0, p); err != nil {
+			return 0, err
+		}
+		return len(p), nil
+	}
 	//n=len(p)
 	//err= s.rawConn.SendMessage(p)
 	//return n, err
@@ -33,6 +53,55 @@ func (s *ShellConn) Write(p []byte) (n int, err error) {
 
 func (s *ShellConn) Close() error {
 	return s.rawConn.Close()
+}
+
+func (s *ShellConn) readShellV2(p []byte) (int, error) {
+	for s.readBuf.Len() == 0 {
+		packetID, payload, err := s.readShellV2Packet()
+		if err != nil {
+			return 0, err
+		}
+		switch packetID {
+		case 1, 2:
+			if len(payload) > 0 {
+				_, _ = s.readBuf.Write(payload)
+			}
+		case 3:
+			return 0, io.EOF
+		default:
+			// Ignore control packets that are not command output.
+		}
+	}
+	return s.readBuf.Read(p)
+}
+
+func (s *ShellConn) readShellV2Packet() (byte, []byte, error) {
+	header := make([]byte, 5)
+	if _, err := io.ReadFull(s.rawConn, header); err != nil {
+		return 0, nil, err
+	}
+	payloadLen := binary.LittleEndian.Uint32(header[1:])
+	payload := make([]byte, payloadLen)
+	if payloadLen > 0 {
+		if _, err := io.ReadFull(s.rawConn, payload); err != nil {
+			return 0, nil, err
+		}
+	}
+	return header[0], payload, nil
+}
+
+func (s *ShellConn) writeShellV2(packetID byte, payload []byte) error {
+	header := make([]byte, 5)
+	header[0] = packetID
+	binary.LittleEndian.PutUint32(header[1:], uint32(len(payload)))
+	if _, err := s.rawConn.Write(header); err != nil {
+		return err
+	}
+	if len(payload) == 0 {
+		return nil
+	}
+	_, err := s.rawConn.Write(payload)
+	return err
 }
 
 func (s *ShellConn) ReadUntil(untilData []byte) ([]byte, error) {
@@ -86,5 +155,5 @@ type ShellConnRunCommandArgs struct {
 }
 
 func (s *ShellConn) RunCommand(ctx context.Context, args ShellConnRunCommandArgs) (exitCode int, outputData []byte, err error) {
-	return os_specific.RunCommandInShell(ctx, s.rawConn, args.CommandStr)
+	return os_specific.RunCommandInShell(ctx, s, args.CommandStr)
 }

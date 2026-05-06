@@ -347,7 +347,10 @@ func (c *Device) InteractiveShell(cmdName string, args ...string) (*wire.ShellCo
 	if err != nil {
 		return nil, wrapClientError(err, c, topic+"_DialDevice")
 	}
-	cmd := fmt.Sprintf("exec:%s", cmdName)
+	cmd := "shell,v2,raw:"
+	if strings.TrimSpace(cmdName) != "" && cmdName != "sh" {
+		cmd += cmdName
+	}
 	if len(args) > 0 {
 		cmd += " " + strings.Join(args, " ")
 	}
@@ -362,7 +365,7 @@ func (c *Device) InteractiveShell(cmdName string, args ...string) (*wire.ShellCo
 	if !wire.IsOkayStatus(statusStr) {
 		return nil, fmt.Errorf("unexpected status: %s", statusStr)
 	}
-	return wire.NewShellConn(conn)
+	return wire.NewShellV2Conn(conn)
 }
 
 func (c *Device) StartPortForwarding(localProtocolKind ForwardProtocolKind, localPort int, remoteProtocolKind ForwardProtocolKind, remotePort int) error {

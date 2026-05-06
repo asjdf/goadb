@@ -92,6 +92,9 @@ func RunCommandInShell(ctx context.Context, conn io.ReadWriter, cmdStr string) (
 				return -1, nil, fmt.Errorf("command execution error: %w", readErr)
 			}
 		case <-ctx.Done():
+			if closer, ok := conn.(io.Closer); ok {
+				_ = closer.Close()
+			}
 			return -1, nil, fmt.Errorf("command execution timeout: %w", ctx.Err())
 		}
 	}
@@ -125,7 +128,7 @@ func RunCommandInShell(ctx context.Context, conn io.ReadWriter, cmdStr string) (
 
 		// 过滤掉第一行：通常是命令的回显 (Input Echo)
 		// 简单的判断方法：如果这一行包含了我们的 marker 且包含了 cmdStr，或者是 cmdStr 本身，就认为是回显
-		if i == 0 && (strings.Contains(trimLine, marker) || strings.Contains(trimLine, cmdStr)) {
+		if i == 0 && (strings.Contains(trimLine, marker) || trimLine == cmdStr) {
 			continue
 		}
 
