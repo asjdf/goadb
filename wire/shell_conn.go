@@ -16,6 +16,15 @@ type ShellConn struct {
 	readBuf bytes.Buffer
 }
 
+const (
+	shellV2PacketStdin            byte = 0
+	shellV2PacketStdout           byte = 1
+	shellV2PacketStderr           byte = 2
+	shellV2PacketExit             byte = 3
+	shellV2PacketCloseStdin       byte = 4
+	shellV2PacketWindowSizeChange byte = 5
+)
+
 func NewShellConn(rawConn *Conn) (*ShellConn, error) {
 	var shellConn = ShellConn{
 		rawConn: rawConn,
@@ -40,7 +49,7 @@ func (s *ShellConn) Read(p []byte) (n int, err error) {
 
 func (s *ShellConn) Write(p []byte) (n int, err error) {
 	if s.framed {
-		if err := s.writeShellV2(0, p); err != nil {
+		if err := s.writeShellV2(shellV2PacketStdin, p); err != nil {
 			return 0, err
 		}
 		return len(p), nil
@@ -55,6 +64,21 @@ func (s *ShellConn) Close() error {
 	return s.rawConn.Close()
 }
 
+func (s *ShellConn) CloseStdin() error {
+	if !s.framed {
+		return nil
+	}
+	return s.writeShellV2(shellV2PacketCloseStdin, nil)
+}
+
+func (s *ShellConn) SetWindowSize(rows, cols, xPixels, yPixels int) error {
+	if !s.framed {
+		return nil
+	}
+	payload := []byte(fmt.Sprintf("%dx%d,%dx%d\x00", rows, cols, xPixels, yPixels))
+	return s.writeShellV2(shellV2PacketWindowSizeChange, payload)
+}
+
 func (s *ShellConn) readShellV2(p []byte) (int, error) {
 	for s.readBuf.Len() == 0 {
 		packetID, payload, err := s.readShellV2Packet()
@@ -62,11 +86,11 @@ func (s *ShellConn) readShellV2(p []byte) (int, error) {
 			return 0, err
 		}
 		switch packetID {
-		case 1, 2:
+		case shellV2PacketStdout, shellV2PacketStderr:
 			if len(payload) > 0 {
 				_, _ = s.readBuf.Write(payload)
 			}
-		case 3:
+		case shellV2PacketExit:
 			return 0, io.EOF
 		default:
 			// Ignore control packets that are not command output.

@@ -129,6 +129,45 @@ func TestInstallWithContextCancelStopsInstall(t *testing.T) {
 	assert.Equal(t, context.Canceled, causeErr.Cause)
 }
 
+func TestInteractiveShellUsesRawShellProtocolByDefault(t *testing.T) {
+	conn := &installTestConn{
+		status: wire.StatusSuccess,
+	}
+	client := (&Adb{&installTestServer{conn: conn}}).Device(AnyDevice())
+
+	shell, err := client.InteractiveShell("cat")
+	if shell != nil {
+		_ = shell.Close()
+	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, []string{
+		"host:transport-any",
+		"shell,v2,raw:cat",
+	}, conn.requests)
+}
+
+func TestOpenShellUsesPtyShellProtocol(t *testing.T) {
+	conn := &installTestConn{
+		status: wire.StatusSuccess,
+	}
+	client := (&Adb{&installTestServer{conn: conn}}).Device(AnyDevice())
+
+	shell, err := client.OpenShell(ShellOptions{
+		Pty:  true,
+		Term: "xterm-256color",
+	})
+	if shell != nil {
+		_ = shell.Close()
+	}
+
+	assert.NoError(t, err)
+	assert.Equal(t, []string{
+		"host:transport-any",
+		"shell,v2,TERM=xterm-256color,pty:",
+	}, conn.requests)
+}
+
 func TestPrepareCommandLineNoArgs(t *testing.T) {
 	result, err := prepareCommandLine("cmd")
 	assert.NoError(t, err)

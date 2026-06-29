@@ -339,20 +339,36 @@ func closeOnContextDone(ctx context.Context, closer io.Closer) func() {
 	}
 }
 
-// InteractiveShell 开启交互终端，需要手动关闭连接
-// cmdName通常传sh，或其他持续输出的命令
+type ShellOptions struct {
+	Command string
+	Args    []string
+	Pty     bool
+	Term    string
+}
+
+// InteractiveShell opens a shell-v2 raw interactive command.
 func (c *Device) InteractiveShell(cmdName string, args ...string) (*wire.ShellConn, error) {
-	const topic = "InteractiveShell"
+	command := strings.TrimSpace(cmdName)
+	if command == "sh" && len(args) == 0 {
+		command = ""
+	}
+	return c.OpenShell(ShellOptions{
+		Command: command,
+		Args:    args,
+	})
+}
+
+func (c *Device) OpenShell(options ShellOptions) (*wire.ShellConn, error) {
+	const topic = "OpenShell"
 	conn, err := c.dialDevice()
 	if err != nil {
 		return nil, wrapClientError(err, c, topic+"_DialDevice")
 	}
-	cmd := "shell,v2,raw:"
-	if strings.TrimSpace(cmdName) != "" && cmdName != "sh" {
-		cmd += cmdName
-	}
-	if len(args) > 0 {
-		cmd += " " + strings.Join(args, " ")
+
+	cmd, err := shellServiceString(options)
+	if err != nil {
+		_ = conn.Close()
+		return nil, wrapClientError(err, c, topic+"_BuildServiceString")
 	}
 	err = conn.SendMessage([]byte(cmd))
 	if err != nil {
@@ -366,6 +382,33 @@ func (c *Device) InteractiveShell(cmdName string, args ...string) (*wire.ShellCo
 		return nil, fmt.Errorf("unexpected status: %s", statusStr)
 	}
 	return wire.NewShellV2Conn(conn)
+}
+
+func shellServiceString(options ShellOptions) (string, error) {
+	mode := "raw"
+	if options.Pty {
+		mode = "pty"
+	}
+
+	service := "shell,v2"
+	if term := strings.TrimSpace(options.Term); term != "" {
+		service += ",TERM=" + term
+	}
+	service += "," + mode + ":"
+
+	command := strings.TrimSpace(options.Command)
+	if command == "" {
+		if len(options.Args) > 0 {
+			return "", errors.AssertionErrorf("shell command cannot be empty when args are provided")
+		}
+		return service, nil
+	}
+
+	commandLine, err := prepareCommandLine(command, options.Args...)
+	if err != nil {
+		return "", err
+	}
+	return service + commandLine, nil
 }
 
 func (c *Device) StartPortForwarding(localProtocolKind ForwardProtocolKind, localPort int, remoteProtocolKind ForwardProtocolKind, remotePort int) error {
