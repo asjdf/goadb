@@ -29,7 +29,9 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println("Starting server…")
-	client.StartServer()
+	if err := client.StartServer(false); err != nil {
+		log.Fatal(err)
+	}
 
 	serverVersion, err := client.ServerVersion()
 	if err != nil {
