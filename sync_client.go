@@ -65,7 +65,7 @@ func sendFile(conn *wire.SyncConn, path string, mode os.FileMode, mtime time.Tim
 		return nil, err
 	}
 
-	return newSyncFileWriter(conn, mtime), nil
+	return newSyncFileWriterWithStatus(conn, conn, mtime), nil
 }
 
 func readStat(s wire.SyncScanner) (entry *DirEntry, err error) {
